@@ -55,5 +55,12 @@ def flash_decoding_attention(
 output = flash_decoding_attention(q, k_cache, v_cache, current_k, current_v, mask, kv_seq_len)
 ```
 
+### TODO
+
+- [ ] benchmark.
+- [ ] acceleration of short context tree attention.
+- [ ] integration into transformers, medusa, and glide with a cape.
+- [ ] kv cache management.
+
 This library is designed for advanced users familiar with transformer architectures and speculative decoding techniques, providing a  tool for those looking to enhance the performance of their neural networks through optimized decoding strategies.
 
