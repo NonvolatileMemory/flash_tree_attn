@@ -57,6 +57,7 @@ output = flash_decoding_attention(q, k_cache, v_cache, current_k, current_v, mas
 
 ### TODO
 
+- [ ] replace the padding.
 - [ ] benchmark.
 - [ ] acceleration of short context tree attention.
 - [ ] integration into transformers, medusa, and glide with a cape.
