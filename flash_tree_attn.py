@@ -317,7 +317,7 @@ def flash_decoding_attention(
     for i in range(bsz):
         tail_index = min(mask_kv_len, last_len[i])
         if last_len[i] == 0:
-            tree_mask_2[i, :, :mask_kv_len] = tree_mask[i]
+            tree_mask_2[i, :, -mask_kv_len:] = tree_mask[i]
         elif (mask_kv_len > last_len[i]):
             tree_mask_1[i, :, block_size + last_len[i] - mask_kv_len:] = tree_mask[i, :, 0: mask_kv_len - last_len[i]]
             tree_mask_2[i, :, :tail_index] = tree_mask[i, :, -tail_index:]
@@ -499,7 +499,7 @@ def test_tree_op(Z, H, N_CTX, HEAD_DIM, q_len):
     mask = tree_mask(q)
     mask[:, 0] = 1
     sm_scale = 1.0 / (HEAD_DIM**0.5)
-    kvtest = 353 # 353 wrong, 352 赋值wrong, 100 wrong
+    kvtest = 352 # 353 wrong, 352 赋值wrong, 100 wrong
     # reference implementation
     ref_out, _ = torch_tree_attention(q, torch.cat([k[:, :, :kvtest], current_k], dim=2), torch.cat([v[:, :, :kvtest], current_v], dim=2), mask.clone(), sm_scale)
     mask = mask[None, :, :].repeat(Z, 1, 1)
