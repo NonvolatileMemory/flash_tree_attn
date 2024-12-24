@@ -1,6 +1,6 @@
 # Applying Flash-Decoding as descibed in
 # https://pytorch.org/blog/flash-decoding/
-# by Tri Dao, 2023
+# by Tri Dao, 2023、
 
 # This file has been modified from its original version.
 # The original file can be found at: https://github.com/hpcaitech/ColossalAI/blob/feat/speculative-decoding/colossalai/kernel/triton/flash_decoding.py
@@ -155,7 +155,7 @@ def _flash_decoding_fwd_kernel(
     # v_cur_block: block_kv, head_dim
     # p_ij_hat: q_len, block_kv
     acc += tl.dot(p_ij_hat, v_cur_block)
-    acc = acc / l_i[:, None]
+    acc = acc / (l_i[:, None] + 1e-7)
 
     # (bsz, num_heads, kv_max_split_num, qlen, head_dim
     cur_offest_mid = cur_token_idx * stride_mid_ot \
@@ -316,13 +316,11 @@ def flash_decoding_attention(
 
     for i in range(bsz):
         tail_index = min(mask_kv_len, last_len[i])
-        if mask_kv_len > last_len[i]:
+        if last_len[i] == 0:
+            tree_mask_2[i, :, :mask_kv_len] = tree_mask[i]
+        elif (mask_kv_len > last_len[i]):
             tree_mask_1[i, :, block_size + last_len[i] - mask_kv_len:] = tree_mask[i, :, 0: mask_kv_len - last_len[i]]
-        
-            if tail_index != 0:
-                tree_mask_2[i, :, :tail_index] = tree_mask[i, :, -tail_index:]
-            else:
-                tree_mask_2[i, :, 0] = tree_mask[i, :, -1]
+            tree_mask_2[i, :, :tail_index] = tree_mask[i, :, -tail_index:]
         else:
             tree_mask_2[i, :, last_len[i]-mask_kv_len: last_len[i]] = tree_mask[i]
 
@@ -402,12 +400,6 @@ def flash_decoding_attention(
         BLOCK_KV=block_size,
         HEAD_DIM=head_dim,
     )
-    # mid_output = torch.permute(mid_output, (0, 1, 3, 2, 4)).contiguous()
-    # assert torch.allclose(mid_output[:, :, 0] , mid_output[:, :, 1], atol=1e-2, rtol=0)
-    # assert torch.allclose(mid_output_lse[:, :, 0] , mid_output_lse[:, :, 1], atol=1e-2, rtol=0)
-    # mid_output_lse = torch.permute(mid_output_lse, (0, 1, 3, 2)).contiguous()
-    print("output is nan: ", mid_output.isnan().any())
-    print("output lse is nan: ", mid_output_lse.isnan().any())
 
     grid = (triton.next_power_of_2(bsz), num_heads, q_len)
     _flash_decoding_fwd_reduce_kernel[grid](
@@ -507,7 +499,7 @@ def test_tree_op(Z, H, N_CTX, HEAD_DIM, q_len):
     mask = tree_mask(q)
     mask[:, 0] = 1
     sm_scale = 1.0 / (HEAD_DIM**0.5)
-    kvtest = 100 # 353 wrong, 352 赋值wrong, 100 wrong
+    kvtest = 353 # 353 wrong, 352 赋值wrong, 100 wrong
     # reference implementation
     ref_out, _ = torch_tree_attention(q, torch.cat([k[:, :, :kvtest], current_k], dim=2), torch.cat([v[:, :, :kvtest], current_v], dim=2), mask.clone(), sm_scale)
     mask = mask[None, :, :].repeat(Z, 1, 1)
@@ -516,10 +508,6 @@ def test_tree_op(Z, H, N_CTX, HEAD_DIM, q_len):
     # 512 + 32
     kv_seq_len = torch.tensor([kvtest] * Z).cuda()    
     out = flash_decoding_attention(q, k, v, current_k, current_v, mask, kv_seq_len, 128)
-    print((ref_out - out).sum(dim=-1))
-    print(ref_out.isnan().any())
-    print(out.isnan().any())
-    print((ref_out - out).sum(dim=-1).max())
     # current_out, current_lse = torch_tree_attention(q, current_k, current_v, mask, sm_scale)
 
     # tri_out = (cache_out - F.sigmoid(current_lse - cache_lse) * (cache_out - current_out))
